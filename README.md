@@ -5,8 +5,10 @@ a queue/worker architecture based on the AMPQ messaging protocol.
 
 ## Spin up RabbitMQ with Docker.
 
-A quick way to get an AMPQ service is to spin up RabbitMQ in a docker container.
-This extensions ships a simple command that will run this for you:
+A quick way to get an [AMPQ](https://www.amqp.org/) service is to spin up
+[RabbitMQ](https://www.rabbitmq.com/) in a
+[docker container](https://hub.docker.com/_/rabbitmq). This extensions ships a
+simple command that will run this for you:
 
      drutiny bulk:run-queue-service
 
@@ -31,3 +33,10 @@ profile against the `@sitealias.dev` target and render the results in html and c
 
 The above command will send a job to the queue for each line in `targets.txt`
 where each line is a target like `drush:@sitealias.dev`.
+
+## Processing jobs from the queue.
+
+    drutiny bulk:work
+
+This process is thread safe and multiple of these commands can be run in parallel.
+Consider using something like [Supervisord](http://supervisord.org/)
