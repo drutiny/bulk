@@ -1,0 +1,12 @@
+services:
+  _defaults:
+        autowire: true      # Automatically injects dependencies in your services.
+        autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
+        public: true
+
+  Drutiny\Bulk\Commands\WorkCommand:
+    tags: [command]
+  Drutiny\Bulk\Commands\QueueCommand:
+    tags: [command]
+  Drutiny\Bulk\Commands\RunQueueServiceCommand:
+    tags: [command]
