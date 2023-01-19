@@ -2,7 +2,7 @@
     "name": "drutiny/bulk",
     "description": "Handles running Drutiny profiles from a queue.",
     "type": "library",
-    "license": "GPLv2",
+    "license": "GPL-2.0-or-later",
     "autoload": {
         "psr-4": {
             "Drutiny\\Bulk\\": "src/"
