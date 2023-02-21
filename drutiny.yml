@@ -1,3 +1,5 @@
+parameters:
+  bulk.log.filepath: '%log.directory%/bulk-errors.log.json'
 services:
   _defaults:
         autowire: true      # Automatically injects dependencies in your services.
@@ -6,7 +8,28 @@ services:
 
   Drutiny\Bulk\Commands\WorkCommand:
     tags: [command]
+    arguments:
+      $logger: '@bulk.logger'
   Drutiny\Bulk\Commands\QueueCommand:
     tags: [command]
   Drutiny\Bulk\Commands\RunQueueServiceCommand:
     tags: [command]
+  
+  bulk.logger:
+    class: Monolog\Logger
+    arguments:
+      - 'bulk-errors'
+    calls:
+      - [pushProcessor, ['@Monolog\Processor\PsrLogMessageProcessor']]
+      - [pushHandler, ['@bulk.logger.logfile']]
+
+  bulk.logger.logfile:
+    class: Monolog\Handler\RotatingFileHandler
+    calls:
+      - [setFormatter,['@Monolog\Formatter\JsonFormatter']]
+      - [setLevel, ['%log.level%']]
+    arguments:
+      - '%bulk.log.filepath%'
+      - '%log.max_files%'
+
+  Monolog\Formatter\JsonFormatter:

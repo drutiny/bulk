@@ -15,8 +15,8 @@
         }
     ],
     "require": {
-        "symfony/console": "^5.4|^6.0",
+        "symfony/console": "^6.0",
         "php-amqplib/php-amqplib": "^3.2",
-        "drutiny/drutiny": "^3.4"
+        "drutiny/drutiny": "^3.6"
     }
 }

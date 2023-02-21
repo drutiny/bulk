@@ -2,23 +2,29 @@
 
 namespace Drutiny\Bulk\Commands;
 
+use Drutiny\Console\Command\DrutinyBaseCommand;
+use Psr\Log\LoggerInterface;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Style\SymfonyStyle;
-use PhpAmqpLib\Connection\AMQPStreamConnection;
-use PhpAmqpLib\Message\AMQPMessage;
+use Symfony\Component\Process\Exception\ProcessFailedException;
+use Symfony\Component\Process\Process;
 
-class WorkCommand extends Command
+#[AsCommand(
+    name: 'bulk:work',
+    description: 'Work the profile run queue.'
+)]
+class WorkCommand extends DrutinyBaseCommand
 {
     use AMQPQueueTrait;
 
-    protected static $defaultName = 'bulk:work';
-
-    // the command description shown when running "php bin/console list"
-    protected static $defaultDescription = 'Work the profile run queue.';
+    public function __construct(protected LoggerInterface $logger)
+    {
+        parent::__construct();
+    }
 
     // ...
     protected function configure(): void
@@ -51,30 +57,41 @@ class WorkCommand extends Command
         $callback = function ($msg) use ($drutiny_bin, $channel, $input, $output) {
             $payload = json_decode($msg->body);
 
-            $command = 'php -d memory_limit=%s %s profile:run %s %s --exit-on-severity=16';
-            $args = [
-              escapeshellarg($input->getOption('memory_limit')),
-              escapeshellarg($drutiny_bin),
-              escapeshellarg($payload->profile),
-              escapeshellarg($payload->target),
+            $command = [
+                'php', 
+                '-d', 'memory_limit=' . $input->getOption('memory_limit'),
+                $drutiny_bin,
+                'profile:run', $payload->profile,
+                $payload->target,
+                '--exit-on-severity=16'
             ];
             foreach ($payload->format as $format) {
-                $command .= ' -f %s';
-                $args[] = $format;
+                $command[] = '-f';
+                $command[] = $format;
             }
-            array_unshift($args, $command);
-            $command = call_user_func_array('sprintf', $args);
-            $output->writeln(date('[c] ') . $command);
+            $process = new Process($command);
+            $process->setTimeout(3600);
+            $process->setPty(true);
+
+            $output->writeln(date('[c] ') . $process->getCommandLine());
             $payload->worker_time = time();
-            passthru($command, $return_var);
 
-            $msg->ack();
-
-            if ($return_var !== 0) {
-                $payload->exit_code = $return_var;
-                $output->writeln("[ERROR] {$payload->target} on {$payload->profile} exited with error code ($return_var).");
-                // $channel->basic_publish(new AMQPMessage(json_encode($payload)), '', 'profile_run_error');
+            try {
+                $process->mustRun(function ($type, $buffer) use ($output) {
+                    $output->write($buffer);
+                });
             }
+            catch (ProcessFailedException $e) {
+                $this->logger->error("[ERROR] {$payload->target} on {$payload->profile} exited with error code (".$process->getExitCode().").", [
+                    'target' => $payload->target,   
+                    'profile' => $payload->profile,
+                    'return_var' => $process->getExitCode(),
+                    'stderr' => $process->getErrorOutput(),
+                    'stdout' => $process->getOutput(),
+                ]);
+                $output->writeln("[ERROR] {$payload->target} on {$payload->profile} exited with error code (".$process->getExitCode().").");
+            }
+            $msg->ack();
         };
 
         $channel->basic_qos(null, 1, null);

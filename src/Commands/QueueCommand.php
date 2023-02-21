@@ -7,17 +7,16 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputOption;
-use PhpAmqpLib\Connection\AMQPStreamConnection;
 use PhpAmqpLib\Message\AMQPMessage;
+use Symfony\Component\Console\Attribute\AsCommand;
 
+#[AsCommand(
+    name: 'bulk:queue',
+    description: 'Queues jobs to be run.'
+)]
 class QueueCommand extends Command
 {
     use AMQPQueueTrait;
-
-    protected static $defaultName = 'bulk:queue';
-
-    // the command description shown when running "php bin/console list"
-    protected static $defaultDescription = 'Queues jobs to be run.';
 
     // ...
     protected function configure(): void
@@ -62,13 +61,5 @@ class QueueCommand extends Command
         $connection->close();
 
         return Command::SUCCESS;
-
-        // or return this if some error happened during the execution
-        // (it's equivalent to returning int(1))
-        // return Command::FAILURE;
-
-        // or return this to indicate incorrect command usage; e.g. invalid options
-        // or missing arguments (it's equivalent to returning int(2))
-        // return Command::INVALID
     }
 }
