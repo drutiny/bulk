@@ -14,9 +14,23 @@
             "email": "joshwaihi@gmail.com"
         }
     ],
+<<<<<<< HEAD
     "require": {
         "symfony/console": "^6.0",
         "php-amqplib/php-amqplib": "^3.2",
         "drutiny/drutiny": "^3.6"
+=======
+    "minimum-stability": "dev",
+    "require-dev": {
+        "symfony/console": "^5.4|^6.0",
+        "php-amqplib/php-amqplib": "^3.2",
+        "drutiny/drutiny": "^3.6",
+        "async-aws/sqs": "^1.8@dev"
+    },
+    "suggest": {
+        "drutiny/drutiny": "Allows bulk auditing for Drutiny core.",
+        "php-amqplib/php-amqplib": "Adds support for AMPQ queue services like RabbitMQ.",
+        "aws-sync/sqs": "Adds support for AWS SQS queuing."
+>>>>>>> a459594 (Added SQS support and made library more robust.)
     }
 }

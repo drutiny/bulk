@@ -33,3 +33,6 @@ services:
       - '%log.max_files%'
 
   Monolog\Formatter\JsonFormatter:
+  Drutiny\Bulk\QueueService\AmqpService:
+  Drutiny\Bulk\QueueService\AwsSqsService:
+  Drutiny\Bulk\QueueService\QueueServiceFactory:

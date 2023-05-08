@@ -2,13 +2,20 @@
 
 namespace Drutiny\Bulk\Commands;
 
+use Drutiny\Bulk\Message\ProfileRun;
+use Drutiny\Bulk\QueueService\QueueServiceFactory;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputOption;
+<<<<<<< HEAD
 use PhpAmqpLib\Message\AMQPMessage;
 use Symfony\Component\Console\Attribute\AsCommand;
+=======
+use Symfony\Component\Console\Style\SymfonyStyle;
+>>>>>>> a459594 (Added SQS support and made library more robust.)
 
 #[AsCommand(
     name: 'bulk:queue',
@@ -16,49 +23,62 @@ use Symfony\Component\Console\Attribute\AsCommand;
 )]
 class QueueCommand extends Command
 {
-    use AMQPQueueTrait;
+    public function __construct(
+        protected QueueServiceFactory $queueServiceFactory,
+        protected LoggerInterface $logger,
+    )
+    {
+        parent::__construct();
+    }
 
+<<<<<<< HEAD
     // ...
+=======
+    /**
+     * {@inheritDoc}
+     */
+>>>>>>> a459594 (Added SQS support and made library more robust.)
     protected function configure(): void
     {
         $this
-            // the command help shown when running the command with the "--help" option
+            ->setName('bulk:profile:run')
+            ->setDescription('Queues profile:run jobs to be run.')
             ->setHelp('This command allows you to queue targets to be run against a profile.')
             ->addArgument('profile', InputArgument::REQUIRED, 'The profile to audit with')
             ->addArgument('target', InputArgument::OPTIONAL, 'The target to audit')
+            ->addOption(
+                'queue-service', 
+                's', 
+                InputOption::VALUE_OPTIONAL,
+                'The queue service to connect to for messages (e.g. amqp or sqs).',
+                'amqp'
+            )
             ->addOption('target-list', 'l', InputOption::VALUE_OPTIONAL, 'A file of line seperated list of targets to audit.', false)
             ->addOption('format', 'f', InputOption::VALUE_OPTIONAL | InputOption::VALUE_IS_ARRAY, 'A format to generate Options: json, html, csv, md.', ['json'])
-            ->addQueueOptions()
         ;
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $connection = $this->getAMQPConnection($input);
-        $channel = $connection->channel();
-        $channel->queue_declare('profile_run', false, false, false, false);
-        $channel->queue_declare('profile_run_error', false, false, false, false);
-        $timestamp = time();
-
         $targets = [];
         if (file_exists($input->getOption('target-list'))) {
             $targets = array_map('trim', file($input->getOption('target-list')));
         }
         $targets[] = $input->getArgument('target');
 
+        $queue = $this->queueServiceFactory->load($input->getOption('queue-service'));
+
+        $io = new SymfonyStyle($input, $output);
+
         foreach (array_filter($targets) as $app) {
-            $payload = [
-              'target' => $app,
-              'profile' => $input->getArgument('profile'),
-              'timestamp' => $timestamp,
-              'format' => $input->getOption('format'),
-            ];
-            $msg = new AMQPMessage(json_encode($payload));
-            $channel->basic_publish($msg, '', 'profile_run');
-            $output->writeln("[x] Sent {$payload['target']} to the queue");
+            $message = new ProfileRun(
+                profile: $input->getArgument('profile'),
+                target: $app,
+                format: $input->getOption('format')
+            );
+            $queue->send($message);
+            $io->info("Bulk run profile:run of {$message->profile} against {$message->target}.");
         }
-        $channel->close();
-        $connection->close();
 
         return Command::SUCCESS;
     }
