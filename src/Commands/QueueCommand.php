@@ -5,17 +5,13 @@ namespace Drutiny\Bulk\Commands;
 use Drutiny\Bulk\Message\ProfileRun;
 use Drutiny\Bulk\QueueService\QueueServiceFactory;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputOption;
-<<<<<<< HEAD
-use PhpAmqpLib\Message\AMQPMessage;
-use Symfony\Component\Console\Attribute\AsCommand;
-=======
 use Symfony\Component\Console\Style\SymfonyStyle;
->>>>>>> a459594 (Added SQS support and made library more robust.)
 
 #[AsCommand(
     name: 'bulk:queue',
@@ -31,13 +27,9 @@ class QueueCommand extends Command
         parent::__construct();
     }
 
-<<<<<<< HEAD
-    // ...
-=======
     /**
      * {@inheritDoc}
      */
->>>>>>> a459594 (Added SQS support and made library more robust.)
     protected function configure(): void
     {
         $this
