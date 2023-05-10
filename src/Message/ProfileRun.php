@@ -53,7 +53,7 @@ class ProfileRun extends AbstractMessage {
 
         $process = Process::fromShellCommandline($command);
         $process->setTty(true);
-        $process->mustRun();
+        $process->run();
 
         return $process->getExitCode();
     }
