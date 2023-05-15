@@ -49,12 +49,18 @@ class ProfileRun extends AbstractMessage {
             $args[] = escapeshellarg($format);
         }
         $command = sprintf($command, ...$args);
-        $logger->info($command);
+        
 
         $process = Process::fromShellCommandline($command);
         $process->setTty(true);
+        $process->setTimeout(null);
         $process->run();
 
-        return $process->getExitCode();
+        $exit_code = $process->getExitCode();
+        $log = "[$exit_code] $command";
+        $context = ['exit_code' => $exit_code, 'command' => $command];
+        $process->isSuccessful() ? $logger->notice($log, $context) : $logger->error($log, $context);
+
+        return $exit_code < 255 ? MessageInterface::SUCCESS : MessageInterface::RETRY;
     }
 }

@@ -3,6 +3,7 @@
 namespace Drutiny\Bulk\Commands;
 
 use Drutiny\Bulk\Message\MessageInterface;
+use Drutiny\Bulk\Message\ProfileRun;
 use Drutiny\Bulk\QueueService\QueueServiceFactory;
 use Drutiny\Console\Command\DrutinyBaseCommand;
 use Psr\Log\LoggerInterface;
@@ -76,14 +77,15 @@ class WorkCommand extends DrutinyBaseCommand
 
         $this->queueServiceFactory
             ->load($input->getOption('queue-service'))
-            ->consume($input->getArgument('queue_name'), function (MessageInterface $message) use ($drutiny_bin, $input, $output) {
+            ->consume($input->getArgument('queue_name'), function (ProfileRun $message) use ($drutiny_bin, $input, $output) {
                 $exit_code = $message->execute(
                     input: $input,
                     output: $output,
-                    bin: $drutiny_bin
+                    bin: $drutiny_bin,
+                    logger: $this->logger,
                 );
-
                 $this->logger->log($exit_code > 0 ? 'error' : 'info', "Message of type " . $message::class . " returned exit code: $exit_code.");
+                return $exit_code;
             });
 
         return Command::SUCCESS;

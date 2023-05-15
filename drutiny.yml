@@ -18,7 +18,7 @@ services:
   bulk.logger:
     class: Monolog\Logger
     arguments:
-      - 'bulk-errors'
+      - 'bulk'
     calls:
       - [pushProcessor, ['@Monolog\Processor\PsrLogMessageProcessor']]
       - [pushHandler, ['@bulk.logger.logfile']]
@@ -36,3 +36,5 @@ services:
   Drutiny\Bulk\QueueService\AmqpService:
   Drutiny\Bulk\QueueService\AwsSqsService:
   Drutiny\Bulk\QueueService\QueueServiceFactory:
+  Drutiny\Bulk\EventDispatcher\BulkEventSubscriber:
+    tags: [kernel.event_subscriber]

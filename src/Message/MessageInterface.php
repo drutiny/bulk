@@ -6,6 +6,10 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 interface MessageInterface {
+
+    const SUCCESS = 0;
+    const RETRY = 1;
+
     public function asMessage():string;
     public static function fromMessage(string $payload): self;
     public function getQueueName():string;

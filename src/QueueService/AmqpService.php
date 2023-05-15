@@ -86,8 +86,7 @@ class AmqpService implements QueueServiceInterface {
         $this->getChannel($queue_name)->basic_qos(null, 1, null);
         $this->getChannel($queue_name)->basic_consume($queue_name, '', false, false, false, false, function (AMQPMessage $message) use ($callback) {
             $payload = AbstractMessage::fromMessage($message->getBody());
-            $callback($payload);
-            $message->ack();
+            $callback($payload) === MessageInterface::SUCCESS ? $message->ack() : $message->reject();
         });
 
         while ($this->getChannel($queue_name)->is_consuming()) {
