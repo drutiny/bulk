@@ -2,12 +2,13 @@
 
 namespace Drutiny\Bulk\Message;
 
-use Drutiny\Attribute\Name;
 use Drutiny\Bulk\Attribute\Queue;
 use Exception;
 use ReflectionClass;
 
 abstract class AbstractMessage implements MessageInterface {
+
+    public int $exitCode;
     
     /**
      * {@inheritdoc}
