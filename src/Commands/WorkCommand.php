@@ -2,6 +2,7 @@
 
 namespace Drutiny\Bulk\Commands;
 
+use DateTime;
 use Drutiny\Bulk\Message\MessageInterface;
 use Drutiny\Bulk\Message\ProfileRun;
 use Drutiny\Bulk\QueueService\QueueServiceFactory;
@@ -14,6 +15,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 
 #[AsCommand(
     name: 'bulk:work',
@@ -25,6 +27,7 @@ class WorkCommand extends DrutinyBaseCommand
     public function __construct(
         protected QueueServiceFactory $queueServiceFactory,
         protected LoggerInterface $logger,
+        protected EventDispatcher $eventDispatcher,
     )
     {
         parent::__construct();
@@ -74,10 +77,22 @@ class WorkCommand extends DrutinyBaseCommand
             $io->error("Cannot find a drutiny binary to run bulk commands.");
             return Command::FAILURE;
         }
+        $date = new \DateTime();
+        $output->writeln($date->format('H:i:s') . ' Listening to ' . $input->getArgument('queue_name') . ' for new messages...');
+        $output->writeln(['']);
 
         $this->queueServiceFactory
             ->load($input->getOption('queue-service'))
-            ->consume($input->getArgument('queue_name'), function (ProfileRun $message) use ($drutiny_bin, $input, $output) {
+            ->consume($input->getArgument('queue_name'), $this->trackConsumeEvent(function (ProfileRun $message) use ($drutiny_bin, $input, $output) {
+
+                $start = new \DateTime();
+                $output->writeln(sprintf("<info>[%s]</info> <comment>processing new message to profile:run %s %s.</comment>", 
+                    $start->format('Y-m-d H:i:s'),
+                    $message->profile,
+                    $message->target
+                ));
+                $output->writeln(['', '']);
+
                 $exit_code = $message->execute(
                     input: $input,
                     output: $output,
@@ -85,9 +100,33 @@ class WorkCommand extends DrutinyBaseCommand
                     logger: $this->logger,
                 );
                 $this->logger->log($exit_code > 0 ? 'error' : 'info', "Message of type " . $message::class . " returned exit code: $exit_code.");
+
+                $finish = new \DateTime();
+                $interval = $start->diff($finish);
+
+                $output->writeln(sprintf("<info>[%s]</info> <comment>completed message to profile:run %s %s in %s.</comment>", 
+                    $finish->format('Y-m-d H:i:s'),    
+                    $message->profile,
+                    $message->target,
+                    $interval->format('%H hours, %I minutes and %S seconds')
+                ));
+                $output->writeln(['', '']);
+
                 return $exit_code;
-            });
+            }));
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * Use the EventDispatcher to notify listeners of event.
+     */
+    protected function trackConsumeEvent(callable $callback) {
+        return function (ProfileRun $message) use ($callback) {
+            $this->eventDispatcher->dispatch($message, 'BulkWork.ProfileRun.Message');
+            $message->exitCode = $callback($message);
+            $this->eventDispatcher->dispatch($message, 'BulkWork.ProfileRun.Done');
+            return $message->exitCode;
+        };
     }
 }
