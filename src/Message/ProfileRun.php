@@ -6,6 +6,9 @@ use DateTime;
 use DateTimeInterface;
 use DateTimeZone;
 use Drutiny\Bulk\Attribute\Queue;
+use Drutiny\Target\Exception\TargetLoadingException;
+use Drutiny\Target\Exception\TargetNotFoundException;
+use Drutiny\Target\Exception\TargetSourceFailureException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\Console\Input\InputInterface;
@@ -57,10 +60,20 @@ class ProfileRun extends AbstractMessage {
         $process->run();
 
         $exit_code = $process->getExitCode();
+
         $log = "[$exit_code] $command";
-        $context = ['exit_code' => $exit_code, 'command' => $command];
+        $context = [
+            'exit_code' => $exit_code, 
+            'command' => $command,
+            'milliseconds' => (microtime(true) - $process->getStartTime()) * 1000,
+        ];
         $process->isSuccessful() ? $logger->notice($log, $context) : $logger->error($log, $context);
 
-        return $exit_code < 255 ? MessageInterface::SUCCESS : MessageInterface::RETRY;
+        return match ($exit_code) {
+            TargetLoadingException::ERROR_CODE => MessageInterface::RETRY,
+            TargetNotFoundException::ERROR_CODE => MessageInterface::SUCCESS,
+            TargetSourceFailureException::ERROR_CODE => MessageInterface::RETRY,
+            default => MessageInterface::SUCCESS
+        };
     }
 }
