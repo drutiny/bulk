@@ -39,6 +39,12 @@ class QueueCommand extends Command
             ->addArgument('profile', InputArgument::REQUIRED, 'The profile to audit with')
             ->addArgument('target', InputArgument::OPTIONAL, 'The target to audit')
             ->addOption(
+                'queue-name',
+                null,
+                InputOption::VALUE_OPTIONAL,
+                'The queue name to work. Defaults to profile:run.',
+            )
+            ->addOption(
                 'queue-service', 
                 's', 
                 InputOption::VALUE_OPTIONAL,
@@ -68,6 +74,11 @@ class QueueCommand extends Command
                 target: $app,
                 format: $input->getOption('format')
             );
+
+            if ($queue_name = $input->getOption('queue-name')) {
+                $message->setQueueName($queue_name);
+            }
+
             $queue->send($message);
             $io->info("Bulk run profile:run of {$message->profile} against {$message->target}.");
         }
