@@ -11,6 +11,7 @@ abstract class AbstractMessage implements MessageInterface {
     public int $exitCode;
 
     protected string $queueName;
+    protected int $priority = 0;
     
     /**
      * {@inheritdoc}
@@ -22,6 +23,11 @@ abstract class AbstractMessage implements MessageInterface {
             'class' => get_class($this),
             'arguments' => $args
         ]);
+    }
+
+    public function getPriority(): int
+    {
+        return $this->priority;
     }
 
     /**

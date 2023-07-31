@@ -14,4 +14,5 @@ interface MessageInterface {
     public static function fromMessage(string $payload): self;
     public function getQueueName():string;
     public function execute(InputInterface $input, OutputInterface $output, string $bin = 'drutiny');
+    public function getPriority(): int;
 }

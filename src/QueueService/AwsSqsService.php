@@ -2,6 +2,7 @@
 
 namespace Drutiny\Bulk\QueueService;
 
+use AsyncAws\Core\AwsClientFactory;
 use AsyncAws\Core\Exception\Http\ClientException;
 use AsyncAws\Core\Result;
 use AsyncAws\Sqs\Input\ChangeMessageVisibilityRequest;
@@ -10,36 +11,14 @@ use AsyncAws\Sqs\Input\GetQueueUrlRequest;
 use AsyncAws\Sqs\Input\ReceiveMessageRequest;
 use AsyncAws\Sqs\Input\SendMessageRequest;
 use AsyncAws\Sqs\SqsClient;
-use Drutiny\Attribute\Plugin;
-use Drutiny\Attribute\PluginField;
 use Drutiny\Bulk\Message\AbstractMessage;
 use Drutiny\Bulk\Message\MessageInterface;
-use Drutiny\Plugin as DrutinyPlugin;
-use Drutiny\Plugin\FieldType;
 use Drutiny\Settings;
 use Exception;
 use Monolog\Logger;
 use Psr\Log\LoggerInterface;
-use RuntimeException;
-use stdClass;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 
-#[Plugin(name: 'queue:sqs')]
-#[PluginField(
-    name: 'accessKeyId',
-    description: 'AWS accessKeyId',
-    type: FieldType::CREDENTIAL,
-)]
-#[PluginField(
-    name: 'accessKeySecret',
-    description: 'AWS accessKeySecret',
-    type: FieldType::CREDENTIAL,
-)]
-#[PluginField(
-    name: 'region',
-    description: 'AWS region',
-    type: FieldType::CONFIG,
-)]
 class AwsSqsService implements QueueServiceInterface {
 
     protected SqsClient $client;
@@ -53,19 +32,14 @@ class AwsSqsService implements QueueServiceInterface {
     protected int $defaultVisibilityTimeout = 600;
 
     public function __construct(
-        DrutinyPlugin $plugin, 
         Logger $logger,
         protected EventDispatcher $eventDispatcher,
-        Settings $settings
+        Settings $settings,
+        AwsClientFactory $awsFactory
     )
     {
         $this->logger = $logger->withName('queue');
-        $this->client =  new SqsClient(configuration:[
-            'accessKeyId' => $plugin->accessKeyId,
-            'accessKeySecret' => $plugin->accessKeySecret,
-            'region' => $plugin->region,
-        ], logger: $this->logger);
-
+        $this->client =  $awsFactory->sqs();
         $this->defaultVisibilityTimeout = $settings->has('queue.sqs.VisibilityTimeout') ? $settings->get('queue.sqs.VisibilityTimeout') : $this->defaultVisibilityTimeout;
     }
 
@@ -97,6 +71,7 @@ class AwsSqsService implements QueueServiceInterface {
     public function consume(string $queue_name, callable $callback): void
     {
         while (true) {
+            $this->logger->debug("Requesting to recieve messages from " . $this->getQueueUrl($queue_name));
             $result = $this->client->receiveMessage(new ReceiveMessageRequest([
                 'QueueUrl' => $this->getQueueUrl($queue_name),
                 'WaitTimeSeconds' => 20,
