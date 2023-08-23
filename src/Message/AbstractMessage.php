@@ -12,6 +12,7 @@ abstract class AbstractMessage implements MessageInterface {
 
     protected string $queueName;
     protected int $priority = 0;
+    protected array $meta = [];
     
     /**
      * {@inheritdoc}
@@ -28,6 +29,17 @@ abstract class AbstractMessage implements MessageInterface {
     public function getPriority(): int
     {
         return $this->priority;
+    }
+
+    /**
+     * Metadata that is not persisted through the I/O of the queue.
+     */
+    public function setMetadata(string $key, mixed $value): void {
+        $this->meta[$key] = $value;
+    }
+
+    public function getMetadata(string $key): mixed {
+        return $this->meta[$key] ?? null;
     }
 
     /**

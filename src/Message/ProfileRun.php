@@ -38,7 +38,7 @@ class ProfileRun extends AbstractMessage {
     /**
      * {@inheritDoc}
      */
-    public function execute(InputInterface $input, OutputInterface $output, string $bin = 'drutiny', LoggerInterface $logger = new NullLogger):int
+    public function execute(InputInterface $input, OutputInterface $output, string $bin = 'drutiny', LoggerInterface $logger = new NullLogger):MessageStatus
     {
         $command = 'php -d memory_limit=%s %s profile:run %s %s --exit-on-severity=16 --reporting-period-start=%s --reporting-period-end=%s';
         $args = [
@@ -72,10 +72,10 @@ class ProfileRun extends AbstractMessage {
         $process->isSuccessful() ? $logger->notice($log, $context) : $logger->error($log, $context);
 
         return match ($exit_code) {
-            TargetLoadingException::ERROR_CODE => MessageInterface::RETRY,
-            TargetNotFoundException::ERROR_CODE => MessageInterface::SUCCESS,
-            TargetSourceFailureException::ERROR_CODE => MessageInterface::RETRY,
-            default => MessageInterface::SUCCESS
+            TargetLoadingException::ERROR_CODE => MessageStatus::RETRY,
+            TargetNotFoundException::ERROR_CODE => MessageStatus::SUCCESS,
+            TargetSourceFailureException::ERROR_CODE => MessageStatus::RETRY,
+            default => MessageStatus::SUCCESS
         };
     }
 }

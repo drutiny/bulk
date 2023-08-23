@@ -6,8 +6,10 @@ use Drutiny\Attribute\Plugin;
 use Drutiny\Attribute\PluginField;
 use Drutiny\Bulk\Message\AbstractMessage;
 use Drutiny\Bulk\Message\MessageInterface;
+use Drutiny\Bulk\Message\MessageStatus;
 use Drutiny\Plugin as DrutinyPlugin;
 use Drutiny\Plugin\FieldType;
+use Exception;
 use PhpAmqpLib\Channel\AMQPChannel;
 use PhpAmqpLib\Connection\AMQPStreamConnection;
 use PhpAmqpLib\Message\AMQPMessage;
@@ -38,7 +40,7 @@ use PhpAmqpLib\Message\AMQPMessage;
     type: FieldType::CONFIG,
     default: 'guest',
 )]
-class AmqpService implements QueueServiceInterface {
+class AmqpService extends AbstractQueueService {
 
     protected AMQPStreamConnection $connection;
 
@@ -79,19 +81,26 @@ class AmqpService implements QueueServiceInterface {
         $this->getChannel($message->getQueueName())->basic_publish($msg, '', $message->getQueueName());
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    public function consume(string $queue_name, callable $callback):void {
-        $this->getChannel($queue_name)->basic_qos(null, 1, null);
-        $this->getChannel($queue_name)->basic_consume($queue_name, '', false, false, false, false, function (AMQPMessage $message) use ($callback) {
-            $payload = AbstractMessage::fromMessage($message->getBody());
-            $callback($payload) === MessageInterface::SUCCESS ? $message->ack() : $message->reject();
-        });
+    protected function getMessage(string $queue_name): ?MessageInterface
+    {
+        $amqp_msg = $this->getChannel($queue_name)->basic_get($queue_name);
+        $message = AbstractMessage::fromMessage($amqp_msg->getBody());
+        $message->setQueueName($queue_name);
+        $message->setMetadata('amqp.message', $message);
+        return $message;
+    }
 
-        while ($this->getChannel($queue_name)->is_consuming()) {
-            $this->getChannel($queue_name)->wait();
-        }
+    protected function success(MessageStatus $status, MessageInterface $message): void
+    {
+        match ($status) {
+            MessageStatus::SUCCESS => $message->getMetadata('amqp.message')->ack(),
+            MessageStatus::RETRY => $message->getMetadata('amqp.message')->reject()
+        };
+    }
+
+    protected function failure(Exception $e, MessageInterface $message): void
+    {
+        $message->getMetadata('amqp.message')->reject();
     }
 
     public function __destruct()

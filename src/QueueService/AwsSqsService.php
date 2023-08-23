@@ -2,27 +2,16 @@
 
 namespace Drutiny\Bulk\QueueService;
 
-use AsyncAws\Core\AwsClientFactory;
-use AsyncAws\Core\Exception\Http\ClientException;
-use AsyncAws\Core\Result;
-use AsyncAws\Sqs\Input\ChangeMessageVisibilityRequest;
-use AsyncAws\Sqs\Input\DeleteMessageRequest;
-use AsyncAws\Sqs\Input\GetQueueUrlRequest;
-use AsyncAws\Sqs\Input\ReceiveMessageRequest;
-use AsyncAws\Sqs\Input\SendMessageRequest;
-use AsyncAws\Sqs\SqsClient;
+use Aws\Sqs\Exception\SqsException;
+use Aws\Sqs\SqsClient;
 use Drutiny\Bulk\Message\AbstractMessage;
 use Drutiny\Bulk\Message\MessageInterface;
+use Drutiny\Bulk\Message\MessageStatus;
 use Drutiny\Settings;
 use Exception;
 use Monolog\Logger;
-use Psr\Log\LoggerInterface;
-use Symfony\Component\EventDispatcher\EventDispatcher;
 
-class AwsSqsService implements QueueServiceInterface {
-
-    protected SqsClient $client;
-    protected LoggerInterface $logger;
+class AwsSqsService extends AbstractQueueService {
     
     /**
      * @var string[]
@@ -33,13 +22,11 @@ class AwsSqsService implements QueueServiceInterface {
 
     public function __construct(
         Logger $logger,
-        protected EventDispatcher $eventDispatcher,
         Settings $settings,
-        AwsClientFactory $awsFactory
+        protected SqsClient $client
     )
     {
-        $this->logger = $logger->withName('queue');
-        $this->client =  $awsFactory->sqs();
+        $this->logger = $logger->withName('sqs');
         $this->defaultVisibilityTimeout = $settings->has('queue.sqs.VisibilityTimeout') ? $settings->get('queue.sqs.VisibilityTimeout') : $this->defaultVisibilityTimeout;
     }
 
@@ -48,82 +35,78 @@ class AwsSqsService implements QueueServiceInterface {
      */
     public function send(MessageInterface $message): void
     {
-        $this->client->sendMessage(new SendMessageRequest([
+        $this->client->sendMessage([
             'QueueUrl' => $this->getQueueUrl($message->getQueueName()),
             'MessageBody' => $message->asMessage(),
             'MessageGroupId' => substr(hash('md5', $message->asMessage()), 0, 8)
-        ]));
+        ]);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    protected function getMessage(string $queue_name): ?MessageInterface
+    {
+        $this->logger->debug("Requesting to recieve messages from " . $this->getQueueUrl($queue_name));
+
+        $result = $this->client->receiveMessage([
+            'QueueUrl' => $this->getQueueUrl($queue_name),
+            'WaitTimeSeconds' => 20,
+            'MaxNumberOfMessages' => 1,
+            'VisibilityTimeout' => $this->defaultVisibilityTimeout
+        ]);
+        
+        $messages = $result->get('Messages');
+        
+        if (empty($messages)) {
+            return null;
+        }
+
+        $message = AbstractMessage::fromMessage($messages[0]['Body']);
+        $message->setQueueName($queue_name);
+        $message->setMetadata('ReceiptHandle', $messages[0]['ReceiptHandle']);
+        return $message;
     }
 
     /**
      * Get the AWS Queue URL.
      */
     protected function getQueueUrl(string $queue_name):string {
-        $this->queueUrls[$queue_name] ??= $this->client->getQueueUrl(new GetQueueUrlRequest([
+        $this->queueUrls[$queue_name] ??= $this->client->getQueueUrl([
             'QueueName' => $queue_name,
-        ]))->getQueueUrl();
+        ])->get('QueueUrl');
         return $this->queueUrls[$queue_name];
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    public function consume(string $queue_name, callable $callback): void
+    protected function success(MessageStatus $status, MessageInterface $message): void
     {
-        while (true) {
-            $this->logger->debug("Requesting to recieve messages from " . $this->getQueueUrl($queue_name));
-            $result = $this->client->receiveMessage(new ReceiveMessageRequest([
-                'QueueUrl' => $this->getQueueUrl($queue_name),
-                'WaitTimeSeconds' => 20,
-                'MaxNumberOfMessages' => 1,
-                'VisibilityTimeout' => $this->defaultVisibilityTimeout
-            ]));
-
-            foreach ($result->getMessages() as $message) {
-                try {
-                    $this->logger->info("Got new message from SQS for queue $queue_name.");
-                    $payload = AbstractMessage::fromMessage($message->getBody());
-
-                    $result = match ($action = $callback($payload)) {
-                        // Worker failed to handle message. Return to queue to try again.
-                        MessageInterface::RETRY => $this->client->changeMessageVisibility(new ChangeMessageVisibilityRequest([
-                            'QueueUrl' => $this->getQueueUrl($queue_name),
-                            'ReceiptHandle' => $message->getReceiptHandle(),
-                            'VisibilityTimeout' => 0,
-                        ])),
-                        // When finished, delete the message
-                        default => $this->client->deleteMessage(new DeleteMessageRequest([
-                            'QueueUrl' => $this->getQueueUrl($queue_name),
-                            'ReceiptHandle' => $message->getReceiptHandle(),
-                        ]))
-                    };
-
-                    if ($action === MessageInterface::RETRY) {
-                        $message_id = $message->getMessageId();
-                        $this->logger->warning("Message $message_id from SQS queue $queue_name was returned to queue to be retried.");
-                    }
-
-                    assert($result instanceof Result);
-                }
-                catch (Exception $e) {
-                    $this->logger->error($e->getMessage());
-                    $this->eventDispatcher->dispatch((object) ['exception' => $e, 'message' => $payload, 'queue_name' => $queue_name], "queue.sqs.retry");
-
-                    // This may fail if the message receipt has expired.
-                    $result = $this->client->changeMessageVisibility(new ChangeMessageVisibilityRequest([
-                        'QueueUrl' => $this->getQueueUrl($queue_name),
-                        'ReceiptHandle' => $message->getReceiptHandle(),
-                        'VisibilityTimeout' => 0,
-                    ]));
-                }
-                try {
-                    $result?->resolve();
-                    $result = null;
-                }
-                catch (ClientException $e) {
-                    $this->logger->error($e->getMessage());
-                }
-            }
+        try {
+            match ($status) {
+                // Worker failed to handle message. Return to queue to try again.
+                MessageStatus::RETRY => $this->client->changeMessageVisibility([
+                    'QueueUrl' => $this->getQueueUrl($message->getQueueName()),
+                    'ReceiptHandle' => $message->getMetadata('ReceiptHandle'),
+                    'VisibilityTimeout' => 0,
+                ]),
+                // When finished, delete the message
+                default => $this->client->deleteMessage([
+                    'QueueUrl' => $this->getQueueUrl($message->getQueueName()),
+                    'ReceiptHandle' => $message->getMetadata('ReceiptHandle'),
+                ])
+            };
         }
+        // This can happen when the message timeout to delete the message expires.
+        catch (SqsException $e) {
+            $this->logger->error($e->getMessage());
+        }
+    }
+
+    protected function failure(Exception $e, MessageInterface $message): void
+    {
+        $this->client->changeMessageVisibility([
+            'QueueUrl' => $this->getQueueUrl($message->getQueueName()),
+            'ReceiptHandle' => $message->getMetadata('ReceiptHandle'),
+            'VisibilityTimeout' => 0,
+        ]);
     }
 }
