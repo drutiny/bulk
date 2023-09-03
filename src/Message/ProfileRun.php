@@ -27,7 +27,8 @@ class ProfileRun extends AbstractMessage {
         public readonly array $format = ['html'],
         DateTimeInterface|array $reportingPeriodStart = new DateTime('-3 days'),
         DateTimeInterface|array $reportingPeriodEnd = new DateTime('now'),
-        int $priority = 0
+        int $priority = 0,
+        protected array $meta = [],
     )
     {
         $this->reportingPeriodEnd = is_array($reportingPeriodEnd) ? new DateTime($reportingPeriodEnd['date'], new DateTimeZone($reportingPeriodEnd['timezone'])) : $reportingPeriodEnd;
