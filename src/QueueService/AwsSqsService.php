@@ -95,7 +95,7 @@ class AwsSqsService extends AbstractQueueService {
 
         $result = $this->client->receiveMessage([
             'QueueUrl' => $this->getQueueUrl($queue_name),
-            'WaitTimeSeconds' => 1,
+            'WaitTimeSeconds' => 5,
             'MaxNumberOfMessages' => 1,
             'VisibilityTimeout' => $this->defaultVisibilityTimeout
         ]);
@@ -124,6 +124,9 @@ class AwsSqsService extends AbstractQueueService {
         return $this->queueUrls[$queue_name];
     }
 
+    /**
+     * {@inheritdoc}
+     */
     protected function success(MessageStatus $status, MessageInterface $message): void
     {
         try {
@@ -147,6 +150,17 @@ class AwsSqsService extends AbstractQueueService {
         }
     }
 
+    /**
+     * {@inheritdoc}
+     */
+    protected function skip(SkipMessageException $e, MessageInterface $message): void
+    {
+        $this->success(MessageStatus::SKIP, $message);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     protected function failure(Exception $e, MessageInterface $message): void
     {
         $this->client->changeMessageVisibility([

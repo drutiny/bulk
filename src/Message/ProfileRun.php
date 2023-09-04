@@ -6,6 +6,7 @@ use DateTime;
 use DateTimeInterface;
 use DateTimeZone;
 use Drutiny\Bulk\Attribute\Queue;
+use Drutiny\Target\Exception\InvalidTargetException;
 use Drutiny\Target\Exception\TargetLoadingException;
 use Drutiny\Target\Exception\TargetNotFoundException;
 use Drutiny\Target\Exception\TargetSourceFailureException;
@@ -74,6 +75,7 @@ class ProfileRun extends AbstractMessage {
 
         return match ($exit_code) {
             TargetLoadingException::ERROR_CODE => MessageStatus::RETRY,
+            InvalidTargetException::ERROR_CODE => MessageStatus::FAIL,
             TargetNotFoundException::ERROR_CODE => MessageStatus::SUCCESS,
             TargetSourceFailureException::ERROR_CODE => MessageStatus::RETRY,
             default => MessageStatus::SUCCESS
