@@ -53,8 +53,9 @@ abstract class AbstractQueueService implements QueueServiceInterface {
                 $this->success($status, $message);
             }
             catch (SkipMessageException $e) {
+                $status = MessageStatus::SKIP;
                 $this->logger->warning("Skipping message: " . $e->getMessage());
-                $event_name = 'queue.message.' . strtolower(MessageStatus::SKIP->name);
+                $event_name = 'queue.message.' . strtolower($status->name);
                 $this->getEventDispatcher()->dispatch($message, $event_name);
                 $this->skip($e, $e->queueMessage);
             }
