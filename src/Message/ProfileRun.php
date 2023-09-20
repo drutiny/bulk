@@ -13,6 +13,7 @@ use Drutiny\Target\Exception\TargetSourceFailureException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Process\Process;
 
@@ -59,9 +60,14 @@ class ProfileRun extends AbstractMessage {
         
 
         $process = Process::fromShellCommandline($command);
-        $process->setTty(true);
+        $process->setTty(Process::isTtySupported());
         $process->setTimeout(null);
-        $process->run();
+        $process->run(function ($type, $buffer) use ($output) {
+            (match ($buffer) {
+                Process::ERR => $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output,
+                default => $output
+            })->writeln($buffer);
+        });
 
         $exit_code = $process->getExitCode();
 
