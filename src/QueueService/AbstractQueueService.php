@@ -43,6 +43,7 @@ abstract class AbstractQueueService implements QueueServiceInterface {
                 ]);
                 $event_name = 'queue.message.new';
                 $this->getEventDispatcher()->dispatch($message, $event_name);
+                $this->preprocess($message);
 
                 $status = $callback($message);
 
@@ -88,7 +89,23 @@ abstract class AbstractQueueService implements QueueServiceInterface {
      */
     abstract protected function getMessage(string $queue_name): ?MessageInterface;
 
+    /**
+     * Callback hook when the message was successfully processed.
+     */
     protected function success(MessageStatus $status, MessageInterface $message): void {}
+
+    /**
+     * Callback hook when a message failed to process successfully.
+     */
     protected function failure(\Exception $e, MessageInterface $message): void {}
+
+    /**
+     * Callback hook when a SkipMessageException was thrown.
+     */
     protected function skip(SkipMessageException $e, MessageInterface $message): void {}
+
+    /**
+     * Callback hook before a message is processed.
+     */
+    protected function preprocess(MessageInterface $message): void {}
 }
