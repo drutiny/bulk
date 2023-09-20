@@ -13,18 +13,20 @@ use Monolog\Logger;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 class AwsSqsService extends AbstractQueueService {
-
-    /**
-     * @var int The number of seconds to delay message polls.
-     */
-    const DEFAULT_POLL_DELAY = 20;
     
     /**
      * @var string[]
      */
     protected array $queueUrls;
     private array $lastMessageTime;
-    private int $pollDelay;
+    private int $pollDelay = 20;
+
+    /**
+     * If true, delete the message from the queue before the message is processed.
+     * 
+     * This is useful if you have another system that will requeue failed messages.
+     */
+    private bool $earlyAck = false;
 
     protected int $defaultVisibilityTimeout = 600;
 
@@ -36,8 +38,16 @@ class AwsSqsService extends AbstractQueueService {
     )
     {
         $this->logger = $logger->withName('sqs');
-        $this->defaultVisibilityTimeout = $settings->has('queue.sqs.VisibilityTimeout') ? $settings->get('queue.sqs.VisibilityTimeout') : $this->defaultVisibilityTimeout;
-        $this->pollDelay = $settings->has('queue.sqs.pollDelay') ?   $settings->get('queue.sqs.pollDelay') : self::DEFAULT_POLL_DELAY;
+        
+        if ($settings->has('queue.sqs.VisibilityTimeout')) {
+            $this->defaultVisibilityTimeout = $settings->get('queue.sqs.VisibilityTimeout');
+        }
+        if ($settings->has('queue.sqs.pollDelay')) {
+            $this->pollDelay = $settings->get('queue.sqs.pollDelay');
+        }
+        if ($settings->has('queue.sqs.earlyAck')) {
+            $this->earlyAck = (bool) $settings->get('queue.sqs.earyAck');
+        }
     }
 
     /**
@@ -129,6 +139,9 @@ class AwsSqsService extends AbstractQueueService {
      */
     protected function success(MessageStatus $status, MessageInterface $message): void
     {
+        if ($this->earlyAck) {
+            return;
+        }
         try {
             match ($status) {
                 // Worker failed to handle message. Return to queue to try again.
@@ -153,6 +166,19 @@ class AwsSqsService extends AbstractQueueService {
     /**
      * {@inheritdoc}
      */
+    protected function preprocess(MessageInterface $message): void
+    {
+        if ($this->earlyAck) {
+            $this->client->deleteMessage([
+                'QueueUrl' => $this->getQueueUrl($message->getQueueName()),
+                'ReceiptHandle' => $message->getMetadata('ReceiptHandle'),
+            ]);
+        }
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     protected function skip(SkipMessageException $e, MessageInterface $message): void
     {
         $this->success(MessageStatus::SKIP, $message);
@@ -163,10 +189,6 @@ class AwsSqsService extends AbstractQueueService {
      */
     protected function failure(Exception $e, MessageInterface $message): void
     {
-        $this->client->changeMessageVisibility([
-            'QueueUrl' => $this->getQueueUrl($message->getQueueName()),
-            'ReceiptHandle' => $message->getMetadata('ReceiptHandle'),
-            'VisibilityTimeout' => 0,
-        ]);
+        $this->success(MessageStatus::FAIL, $message);
     }
 }
