@@ -42,6 +42,10 @@ abstract class AbstractMessage implements MessageInterface {
         return $this->meta[$key] ?? null;
     }
 
+    public function getMetadataAll(): array {
+        return $this->meta;
+    }
+
     /**
      * {@inheritdoc}
      */

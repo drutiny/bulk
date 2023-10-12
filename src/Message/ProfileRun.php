@@ -31,6 +31,7 @@ class ProfileRun extends AbstractMessage {
         DateTimeInterface|array $reportingPeriodEnd = new DateTime('now'),
         int $priority = 0,
         protected array $meta = [],
+        public readonly string $store = 'fs',
     )
     {
         $this->reportingPeriodEnd = is_array($reportingPeriodEnd) ? new DateTime($reportingPeriodEnd['date'], new DateTimeZone($reportingPeriodEnd['timezone'])) : $reportingPeriodEnd;
@@ -43,14 +44,15 @@ class ProfileRun extends AbstractMessage {
      */
     public function execute(InputInterface $input, OutputInterface $output, string $bin = 'drutiny', LoggerInterface $logger = new NullLogger):MessageStatus
     {
-        $command = 'php -d memory_limit=%s %s profile:run %s %s --exit-on-severity=16 --reporting-period-start=%s --reporting-period-end=%s';
+        $command = 'php -d memory_limit=%s %s profile:run %s %s --exit-on-severity=16 --reporting-period-start=%s --reporting-period-end=%s --store=%s';
         $args = [
           escapeshellarg($input->getOption('memory_limit')),
           escapeshellarg($bin),
           escapeshellarg($this->profile),
           escapeshellarg($this->target),
           escapeshellarg($this->reportingPeriodStart->format('Y-m-d H:i:s')),
-          escapeshellarg($this->reportingPeriodEnd->format('Y-m-d H:i:s'))
+          escapeshellarg($this->reportingPeriodEnd->format('Y-m-d H:i:s')),
+          escapeshellarg($this->store)
         ];
         foreach ($this->format as $format) {
             $command .= ' -f %s';
