@@ -67,7 +67,11 @@ class AmqpService extends AbstractQueueService {
     protected function getChannel(string $name):AMQPChannel {
         if (!isset($this->channel[$name])) {
             $this->channel[$name] = $this->connection->channel();
-            $this->channel[$name]->queue_declare($name, false, false, false, false);
+
+            $this->channel[$name]->queue_declare(
+                queue: $name,
+                auto_delete: false
+            );
         }
         return $this->channel[$name];
     }
@@ -84,17 +88,21 @@ class AmqpService extends AbstractQueueService {
     protected function getMessage(string $queue_name): ?MessageInterface
     {
         $amqp_msg = $this->getChannel($queue_name)->basic_get($queue_name);
+        if ($amqp_msg === null) {
+            usleep(1000);
+            return null;
+        }
         $message = AbstractMessage::fromMessage($amqp_msg->getBody());
         $message->setQueueName($queue_name);
-        $message->setMetadata('amqp.message', $message);
+        $message->setMetadata('amqp.message', $amqp_msg);
         return $message;
     }
 
     protected function success(MessageStatus $status, MessageInterface $message): void
     {
         match ($status) {
-            MessageStatus::SUCCESS => $message->getMetadata('amqp.message')->ack(),
-            MessageStatus::RETRY => $message->getMetadata('amqp.message')->reject()
+            MessageStatus::RETRY => $message->getMetadata('amqp.message')->reject(),
+            default => $message->getMetadata('amqp.message')->ack(),
         };
     }
 
