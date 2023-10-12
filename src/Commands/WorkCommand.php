@@ -85,9 +85,13 @@ class WorkCommand extends DrutinyBaseCommand
         
         do {
             $date = new \DateTime();
-            $output->writeln(strtr($date->format('H:i:s') . " Consuming messages from queue", [
-                'queue' => $queues[$priority]
-            ]));
+
+            if (count($queues) > 1) {
+                // Communicate that we're checking a different queue.
+                $output->writeln(strtr($date->format('H:i:s') . " Consuming messages from queue", [
+                    'queue' => $queues[$priority]
+                ]));
+            }
 
             $last_message_status = $queueService->consume(
                 queue_name: $queues[$priority], 
