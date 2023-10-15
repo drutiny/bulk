@@ -20,18 +20,18 @@ use Symfony\Component\Process\Process;
 #[Queue(name: 'profile:run')]
 class ProfileRun extends AbstractMessage {
 
-    public readonly DateTimeInterface $reportingPeriodStart;
-    public readonly DateTimeInterface $reportingPeriodEnd;
+    public DateTimeInterface $reportingPeriodStart;
+    public DateTimeInterface $reportingPeriodEnd;
 
     public function __construct(
-        public readonly string $profile,
-        public readonly string $target,
-        public readonly array $format = ['html'],
+        public string $profile,
+        public string $target,
+        public array $format = ['html'],
         DateTimeInterface|array $reportingPeriodStart = new DateTime('-3 days'),
         DateTimeInterface|array $reportingPeriodEnd = new DateTime('now'),
         int $priority = 0,
         protected array $meta = [],
-        public readonly string $store = 'fs',
+        public string $store = 'fs',
     )
     {
         $this->reportingPeriodEnd = is_array($reportingPeriodEnd) ? new DateTime($reportingPeriodEnd['date'], new DateTimeZone($reportingPeriodEnd['timezone'])) : $reportingPeriodEnd;
@@ -63,12 +63,13 @@ class ProfileRun extends AbstractMessage {
 
         $process = Process::fromShellCommandline($command);
         $process->setTty(Process::isTtySupported());
+        $process->setPty(Process::isPtySupported());
         $process->setTimeout(null);
         $process->run(function ($type, $buffer) use ($output) {
             (match ($buffer) {
                 Process::ERR => $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output,
                 default => $output
-            })->writeln($buffer);
+            })->write($buffer);
         });
 
         $exit_code = $process->getExitCode();
