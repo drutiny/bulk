@@ -44,7 +44,7 @@ class ProfileRun extends AbstractMessage {
      */
     public function execute(InputInterface $input, OutputInterface $output, string $bin = 'drutiny', LoggerInterface $logger = new NullLogger):MessageStatus
     {
-        $command = 'php -d memory_limit=%s %s profile:run %s %s --exit-on-severity=16 --reporting-period-start=%s --reporting-period-end=%s --store=%s';
+        $command = 'php -d memory_limit=%s %s profile:run %s %s --no-interaction --exit-on-severity=16 --reporting-period-start=%s --reporting-period-end=%s --store=%s';
         $args = [
           escapeshellarg($input->getOption('memory_limit')),
           escapeshellarg($bin),
