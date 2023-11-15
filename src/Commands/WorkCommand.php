@@ -2,34 +2,69 @@
 
 namespace Drutiny\Bulk\Commands;
 
-use DateTime;
+use Drutiny\Attribute\Autoload;
+use Drutiny\Bulk\Message\MessageInterface;
 use Drutiny\Bulk\Message\MessageStatus;
+use Drutiny\Bulk\Message\ProcessInterface;
 use Drutiny\Bulk\Message\ProfileRun;
 use Drutiny\Bulk\QueueService\QueueServiceFactory;
-use Drutiny\Console\Command\DrutinyBaseCommand;
+use Drutiny\Console\Command\AbstractBaseCommand;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Command\SignalableCommandInterface;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
-use Symfony\Component\EventDispatcher\EventDispatcher;
+use Symfony\Component\Process\Exception\ExceptionInterface;
+use Symfony\Component\Process\Process;
 
 #[AsCommand(
     name: 'bulk:work',
     description: 'Work the profile run queue.'
 )]
-class WorkCommand extends DrutinyBaseCommand
+class WorkCommand extends AbstractBaseCommand implements SignalableCommandInterface
 {
 
-    public function __construct(
-        protected QueueServiceFactory $queueServiceFactory,
-        protected LoggerInterface $logger,
-    )
+    protected QueueServiceFactory $queueServiceFactory;
+
+    #[Autoload(service: 'bulk.logger')]
+    protected LoggerInterface $logger;
+
+    #[Autoload(false)]
+    private MessageInterface $currentMessage;
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getSubscribedSignals(): array
     {
-        parent::__construct();
+        return [\SIGINT, \SIGTERM, \SIGUSR1];
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function handleSignal(int $signal)
+    {
+
+        if (!isset($this->currentMessage)) {
+            return;
+        }
+        if (!($this->currentMessage instanceof ProcessInterface)) {
+            return;
+        }
+        
+        try {
+            $this->currentMessage->handleSignal($signal);
+        }
+        catch (ExceptionInterface $e) {
+            $this->logger->error($e->getMessage());
+        }
+
+        return $signal;
     }
 
     /**
@@ -66,7 +101,7 @@ class WorkCommand extends DrutinyBaseCommand
     /**
      * {@inheritDoc}
      */
-    protected function execute(InputInterface $input, OutputInterface $output): int
+    protected function doExecute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
         $drutiny_bin = $GLOBALS['_composer_bin_dir'] . '/drutiny';
@@ -95,12 +130,15 @@ class WorkCommand extends DrutinyBaseCommand
 
             $last_message_status = $queueService->consume(
                 queue_name: $queues[$priority], 
-                callback: fn(ProfileRun $message) => $message->execute(
-                    input: $input,
-                    output: $output,
-                    bin: $drutiny_bin,
-                    logger: $this->logger,
-                ),
+                callback: function (ProfileRun $message) use ($input, $output, $drutiny_bin) {
+                    $this->currentMessage = $message;
+                    return $this->currentMessage->execute(
+                        input: $input,
+                        output: $output,
+                        bin: $drutiny_bin,
+                        logger: $this->logger,
+                    );
+                },
                 // Only loop if queue priority is 0 and the queue delivered a message.
                 //continue: fn(MessageStatus $status) => $priority == 0 && $status != MessageStatus::NONE
                 continue: function (MessageStatus $status) use ($priority, $sequential_retries) {

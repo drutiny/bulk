@@ -53,6 +53,13 @@ class QueueCommand extends Command
             )
             ->addOption('target-list', 'l', InputOption::VALUE_OPTIONAL, 'A file of line seperated list of targets to audit.', false)
             ->addOption('format', 'f', InputOption::VALUE_OPTIONAL | InputOption::VALUE_IS_ARRAY, 'A format to generate Options: json, html, csv, md.', ['json'])
+            ->addOption(
+                'store',
+                null,
+                InputOption::VALUE_OPTIONAL,
+                'The handler to use to store the formatted output.',
+                'fs'
+            )
         ;
     }
 
@@ -72,7 +79,8 @@ class QueueCommand extends Command
             $message = new ProfileRun(
                 profile: $input->getArgument('profile'),
                 target: $app,
-                format: $input->getOption('format')
+                format: $input->getOption('format'),
+                store: $input->getOption('store')
             );
 
             if ($queue_name = $input->getOption('queue-name')) {

@@ -8,8 +8,6 @@ services:
 
   Drutiny\Bulk\Commands\WorkCommand:
     tags: [command]
-    arguments:
-      $logger: '@bulk.logger'
   Drutiny\Bulk\Commands\QueueCommand:
     tags: [command]
   Drutiny\Bulk\Commands\RunQueueServiceCommand:

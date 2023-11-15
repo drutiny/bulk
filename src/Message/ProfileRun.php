@@ -18,7 +18,9 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Process\Process;
 
 #[Queue(name: 'profile:run')]
-class ProfileRun extends AbstractMessage {
+class ProfileRun extends AbstractMessage implements ProcessInterface {
+
+    use ProcessTrait;
 
     public DateTimeInterface $reportingPeriodStart;
     public DateTimeInterface $reportingPeriodEnd;
@@ -44,7 +46,7 @@ class ProfileRun extends AbstractMessage {
      */
     public function execute(InputInterface $input, OutputInterface $output, string $bin = 'drutiny', LoggerInterface $logger = new NullLogger):MessageStatus
     {
-        $command = 'php -d memory_limit=%s %s profile:run %s %s --no-interaction --exit-on-severity=16 --reporting-period-start=%s --reporting-period-end=%s --store=%s';
+        $command = 'php -d memory_limit=%s %s profile:run %s %s --no-interaction --exit-on-severity=16 --reporting-period-start=%s --reporting-period-end=%s --store=%s --pipe';
         $args = [
           escapeshellarg($input->getOption('memory_limit')),
           escapeshellarg($bin),
@@ -65,6 +67,7 @@ class ProfileRun extends AbstractMessage {
         $process->setTty(Process::isTtySupported());
         $process->setPty(Process::isPtySupported());
         $process->setTimeout(null);
+        $this->setProcess($process);
         $process->run(function ($type, $buffer) use ($output) {
             (match ($buffer) {
                 Process::ERR => $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output,
