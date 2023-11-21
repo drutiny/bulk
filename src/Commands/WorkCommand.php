@@ -19,7 +19,6 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Process\Exception\ExceptionInterface;
-use Symfony\Component\Process\Process;
 
 #[AsCommand(
     name: 'bulk:work',
@@ -140,10 +139,13 @@ class WorkCommand extends AbstractBaseCommand implements SignalableCommandInterf
                     );
                 },
                 // Only loop if queue priority is 0 and the queue delivered a message.
-                //continue: fn(MessageStatus $status) => $priority == 0 && $status != MessageStatus::NONE
                 continue: function (MessageStatus $status) use ($priority, $sequential_retries) {
                     if ($status == MessageStatus::RETRY) {
                         $sequential_retries++;
+                    }
+                    // Do not reset or increment sequential_retries on a null message.
+                    elseif ($status == MessageStatus::NONE) {
+                        return false;
                     }
                     else {
                         $sequential_retries = 0;
@@ -151,7 +153,7 @@ class WorkCommand extends AbstractBaseCommand implements SignalableCommandInterf
                     if ($sequential_retries >= 10) {
                         return false;
                     }
-                    return $priority == 0 && $status != MessageStatus::NONE;
+                    return $priority == 0;
                 }
             );
 
@@ -170,8 +172,8 @@ class WorkCommand extends AbstractBaseCommand implements SignalableCommandInterf
                 $priority = 0;
             }
 
-            if ($sequential_retries >= 10) {
-                $this->logger->warning("Processed 10 messages in a row that all returned a RETRY status. Perhaps there is something wrong with this worker. Exiting.");
+            if ($sequential_retries >= 3) {
+                $this->logger->warning("Processed 3 messages in a row that all returned a RETRY status. Perhaps there is something wrong with this worker. Exiting.");
                 return Command::FAILURE;
             }
         }
