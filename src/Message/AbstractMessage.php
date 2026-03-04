@@ -5,6 +5,7 @@ namespace Drutiny\Bulk\Message;
 use Drutiny\Bulk\Attribute\Queue;
 use Exception;
 use ReflectionClass;
+use RuntimeException;
 
 abstract class AbstractMessage implements MessageInterface {
 
@@ -52,6 +53,9 @@ abstract class AbstractMessage implements MessageInterface {
     public static function fromMessage(string $payload): self
     {
         $props = json_decode($payload, true);
+        if (!isset($props['class']) || !class_exists($props['class'])) {
+            throw new RuntimeException("Invalid message payload, class not found: {$props['class']}.");
+        }
         $reflection = new ReflectionClass($props['class']);
         return $reflection->newInstance(...$props['arguments']);
     }

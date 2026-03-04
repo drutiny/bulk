@@ -10,6 +10,10 @@ use Drutiny\Bulk\Message\MessageStatus;
 use Drutiny\Settings;
 use Exception;
 use Monolog\Logger;
+use Psr\Log\LoggerInterface;
+use RuntimeException;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 class AwsSqsService extends AbstractQueueService {
@@ -33,7 +37,7 @@ class AwsSqsService extends AbstractQueueService {
     public function __construct(
         Logger $logger,
         Settings $settings,
-        protected SqsClient $client,
+        public readonly SqsClient $client,
         protected EventDispatcherInterface $eventDispatcher
     )
     {
@@ -118,7 +122,24 @@ class AwsSqsService extends AbstractQueueService {
             return null;
         }
 
-        $message = AbstractMessage::fromMessage($messages[0]['Body']);
+        try {
+            $message = AbstractMessage::fromMessage($messages[0]['Body']);
+        }
+        catch (RuntimeException $e) {
+            $message = new class($queue_name) extends AbstractMessage {
+                public function __construct(protected string $queueName) {}
+                public function getQueueName(): string {
+                    return $this->queueName;
+                }
+                public function execute(InputInterface $input, OutputInterface $output, string $bin = 'drutiny', LoggerInterface $logger = new NullLogger): MessageStatus
+                {
+                    throw new \Exception('Not implemented');
+                }
+            };
+            $message->setMetadata('ReceiptHandle', $messages[0]['ReceiptHandle']);
+            throw new SkipMessageException($message, $e->getMessage(), $e);
+        }
+
         $message->setQueueName($queue_name);
         $message->setMetadata('ReceiptHandle', $messages[0]['ReceiptHandle']);
         return $message;
