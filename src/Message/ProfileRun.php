@@ -24,6 +24,19 @@ class ProfileRun extends AbstractMessage implements ProcessInterface {
 
     public DateTimeInterface $reportingPeriodStart;
     public DateTimeInterface $reportingPeriodEnd;
+    
+    /**
+     * Exit on severity threshold for profile:run command.
+     * 
+     * Controls which failures return non-zero exit codes:
+     * - 32: All dependency failures (LOW+ dependencies)
+     * - 36: HIGH and CRITICAL dependency failures only
+     * - 40: CRITICAL dependency failures only
+     * - 0 or false: Disabled (always exit 0)
+     * 
+     * Exit codes >= 32 indicate dependency failures that will be marked as not_applicable.
+     */
+    public int|false $exitOnSeverity;
 
     public function __construct(
         public string $profile,
@@ -34,19 +47,29 @@ class ProfileRun extends AbstractMessage implements ProcessInterface {
         int $priority = 0,
         protected array $meta = [],
         public string $store = 'fs',
+        int|false $exitOnSeverity = false,
     )
     {
         $this->reportingPeriodEnd = is_array($reportingPeriodEnd) ? new DateTime($reportingPeriodEnd['date'], new DateTimeZone($reportingPeriodEnd['timezone'])) : $reportingPeriodEnd;
         $this->reportingPeriodStart = is_array($reportingPeriodStart) ? new DateTime($reportingPeriodStart['date'], new DateTimeZone($reportingPeriodStart['timezone'])) : $reportingPeriodStart;
         $this->priority = $priority;
+        $this->exitOnSeverity = $exitOnSeverity;
     }
 
     /**
      * {@inheritDoc}
+     * 
+     * Exit codes:
+     * - 0: Success
+     * - 1-8: Policy failures by severity (LOW=1, NORMAL=2, HIGH=4, CRITICAL=8)
+     * - 33-40: Dependency failures encoded as 32 + severity weight
+     * - 220: TargetNotFoundException
+     * - 221: TargetLoadingException  
+     * - 222: InvalidTargetException
      */
     public function execute(InputInterface $input, OutputInterface $output, string $bin = 'drutiny', LoggerInterface $logger = new NullLogger):MessageStatus
     {
-        $command = 'php -d memory_limit=%s %s profile:run %s %s --no-interaction --exit-on-severity=16 --reporting-period-start=%s --reporting-period-end=%s --store=%s --pipe';
+        $command = 'php -d memory_limit=%s %s profile:run %s %s --no-interaction --reporting-period-start=%s --reporting-period-end=%s --store=%s --pipe';
         $args = [
           escapeshellarg($input->getOption('memory_limit')),
           escapeshellarg($bin),
@@ -56,6 +79,12 @@ class ProfileRun extends AbstractMessage implements ProcessInterface {
           escapeshellarg($this->reportingPeriodEnd->format('Y-m-d H:i:s')),
           escapeshellarg($this->store)
         ];
+        
+        // Add exit-on-severity option if specified
+        if ($this->exitOnSeverity !== false) {
+            $command .= ' --exit-on-severity=%s';
+            $args[] = escapeshellarg($this->exitOnSeverity);
+        }
         foreach ($this->format as $format) {
             $command .= ' -f %s';
             $args[] = escapeshellarg($format);
@@ -85,11 +114,16 @@ class ProfileRun extends AbstractMessage implements ProcessInterface {
         ];
         $process->isSuccessful() ? $logger->notice($log, $context) : $logger->error($log, $context);
 
-        return match ($exit_code) {
-            TargetLoadingException::ERROR_CODE => MessageStatus::RETRY,
-            InvalidTargetException::ERROR_CODE => MessageStatus::FAIL,
-            TargetNotFoundException::ERROR_CODE => MessageStatus::SUCCESS,
-            TargetSourceFailureException::ERROR_CODE => MessageStatus::RETRY,
+        return match (true) {
+            // Dependency failures (exit codes 32-48) are treated as success for queue processing
+            // The actual workflow state (NA vs FAILED) is handled by EventSubscriber
+            $exit_code >= 32 && $exit_code < 48 => MessageStatus::SUCCESS,
+            // Target-specific error codes
+            $exit_code === TargetLoadingException::ERROR_CODE => MessageStatus::RETRY,
+            $exit_code === InvalidTargetException::ERROR_CODE => MessageStatus::FAIL,
+            $exit_code === TargetNotFoundException::ERROR_CODE => MessageStatus::SUCCESS,
+            $exit_code === TargetSourceFailureException::ERROR_CODE => MessageStatus::RETRY,
+            // All other exit codes (including policy failures) are success for queue processing
             default => MessageStatus::SUCCESS
         };
     }
