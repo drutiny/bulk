@@ -36,7 +36,7 @@ class ProfileRun extends AbstractMessage implements ProcessInterface {
      * 
      * Exit codes >= 32 indicate dependency failures that will be marked as not_applicable.
      */
-    public int|false $exitOnSeverity;
+    public int|false $exitOnSeverity = false;
 
     public function __construct(
         public string $profile,
